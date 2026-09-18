@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../config/app_config.dart';
 import '../models/shared_item.dart';
+import 'clear_history.dart';
 
 class ShareService {
   ShareService(this.client);
@@ -46,14 +47,14 @@ class ShareService {
     });
   }
 
-  Future<void> sendImageBytes({
+  Future<void> sendAttachment({
     required Uint8List bytes,
     required String fileName,
     required String deviceName,
+    bool imageOnly = false,
   }) async {
-    if (bytes.isEmpty) throw ArgumentError('Image is empty');
-    if (bytes.length > AppConfig.maxImageBytes) {
-      throw ArgumentError('Image exceeds the 20 MB limit');
+    if (bytes.length > AppConfig.maxFileBytes) {
+      throw ArgumentError('单个文件不能超过 50 MB');
     }
 
     final mimeType = lookupMimeType(
@@ -67,8 +68,10 @@ class ShareService {
       'image/gif',
       'image/bmp',
     };
-    if (mimeType == null || !supportedMimeTypes.contains(mimeType)) {
-      throw ArgumentError('Only JPG, PNG, WebP, GIF and BMP images are supported');
+    final isImage = supportedMimeTypes.contains(mimeType);
+    if (imageOnly && !isImage) throw ArgumentError('请选择 JPG、PNG、WebP、GIF 或 BMP 图片');
+    if (isImage && bytes.length > AppConfig.maxImageBytes) {
+      throw ArgumentError('单张图片不能超过 20 MB');
     }
 
     final extension = _safeExtension(fileName);
@@ -79,7 +82,7 @@ class ShareService {
           bytes,
           fileOptions: FileOptions(
             cacheControl: '3600',
-            contentType: mimeType,
+            contentType: mimeType ?? 'application/octet-stream',
             upsert: false,
           ),
         );
@@ -87,10 +90,10 @@ class ShareService {
     try {
       await client.from('shared_items').insert({
         'user_id': _user.id,
-        'type': 'image',
+        'type': isImage ? 'image' : 'file',
         'storage_path': storagePath,
         'file_name': fileName,
-        'mime_type': mimeType,
+        'mime_type': mimeType ?? 'application/octet-stream',
         'file_size': bytes.length,
         'device_name': deviceName,
       });
@@ -110,7 +113,7 @@ class ShareService {
         .createSignedUrl(path, 60 * 60);
   }
 
-  Future<Uint8List> downloadImage(SharedItem item) async {
+  Future<Uint8List> downloadAttachment(SharedItem item) async {
     final path = item.storagePath;
     if (path == null || path.isEmpty) {
       throw StateError('Missing storage path');
@@ -119,7 +122,7 @@ class ShareService {
   }
 
   Future<void> deleteItem(SharedItem item) async {
-    if (item.isImage && item.storagePath != null) {
+    if (!item.isText && item.storagePath != null) {
       await client.storage.from(AppConfig.storageBucket).remove([
         item.storagePath!,
       ]);
@@ -129,26 +132,19 @@ class ShareService {
 
   Future<void> clearAll() async {
     final userId = _user.id;
-    final imageRows = await client
-        .from('shared_items')
-        .select('storage_path')
-        .eq('user_id', userId)
-        .eq('type', 'image');
-
-    final paths = (imageRows as List)
-        .map((row) => (row as Map<String, dynamic>)['storage_path'] as String?)
-        .whereType<String>()
-        .where((path) => path.isNotEmpty)
-        .toList(growable: false);
-
-    for (var i = 0; i < paths.length; i += 100) {
-      final end = (i + 100 < paths.length) ? i + 100 : paths.length;
-      await client.storage
-          .from(AppConfig.storageBucket)
-          .remove(paths.sublist(i, end));
-    }
-
-    await client.from('shared_items').delete().eq('user_id', userId);
+    final cutoff = DateTime.now().toUtc().toIso8601String();
+    await clearHistoryBatches(
+      loadBatch: () async => await client.from('shared_items')
+          .select('id,storage_path').eq('user_id', userId)
+          .lte('created_at', cutoff).order('id').limit(100),
+      removeObjects: (paths) async {
+        await client.storage.from(AppConfig.storageBucket).remove(paths);
+      },
+      deleteRows: (ids) async {
+        await client.from('shared_items').delete()
+            .eq('user_id', userId).inFilter('id', ids);
+      },
+    );
   }
 
   Future<bool> hasRecentText(String text) async {

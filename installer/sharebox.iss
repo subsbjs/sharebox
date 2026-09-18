@@ -7,7 +7,7 @@
 [Setup]
 AppId={{420FC1BF-CC22-4B6B-8E09-B26DE6848E36}
 AppName=ShareBox
-AppVersion=1.0.0
+AppVersion=1.1.0
 DefaultDirName={localappdata}\Programs\ShareBox
 DefaultGroupName=ShareBox
 PrivilegesRequired=lowest

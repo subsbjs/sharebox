@@ -1,10 +1,10 @@
--- ShareBox v1 database + Storage setup
+-- ShareBox v1.1 database + Storage setup
 -- Run this entire file once in Supabase Dashboard -> SQL Editor.
 
 create table if not exists public.shared_items (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  type text not null check (type in ('text', 'image')),
+  type text not null check (type in ('text', 'image', 'file')),
   text_content text,
   storage_path text,
   file_name text,
@@ -15,7 +15,7 @@ create table if not exists public.shared_items (
   constraint shared_items_payload_check check (
     (type = 'text' and text_content is not null and storage_path is null)
     or
-    (type = 'image' and storage_path is not null and text_content is null)
+    (type in ('image', 'file') and storage_path is not null and text_content is null)
   )
 );
 
@@ -57,7 +57,7 @@ on public.shared_items for delete
 to authenticated
 using ((select auth.uid()) = user_id);
 
--- Private image bucket, max 20 MB per file.
+-- Private attachment bucket, max 50 MB per file.
 insert into storage.buckets (
   id,
   name,
@@ -69,8 +69,8 @@ values (
   'sharebox',
   'sharebox',
   false,
-  20971520,
-  array['image/jpeg','image/png','image/webp','image/gif','image/bmp']
+  52428800,
+  null
 )
 on conflict (id) do update set
   public = excluded.public,

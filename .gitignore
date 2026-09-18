@@ -2,8 +2,8 @@
 .packages
 .pub/
 build/
-android/
-windows/
+/android/
+/windows/
 config.local.json
 *.log
 .idea/
@@ -12,3 +12,6 @@ dist/
 *.jks
 *.keystore
 key.properties
+
+__pycache__/
+BUILD_STATUS.md

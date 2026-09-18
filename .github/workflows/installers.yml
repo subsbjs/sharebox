@@ -38,6 +38,10 @@ jobs:
       - name: Build Windows
         if: matrix.target == 'windows'
         run: flutter build windows --release --dart-define-from-file=config.public.json
+      - name: Verify Windows closes its process
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: ./tooling/test_windows_exit.ps1
       - name: Package Windows installer
         if: matrix.target == 'windows'
         shell: pwsh

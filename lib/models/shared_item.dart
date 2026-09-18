@@ -1,4 +1,4 @@
-enum SharedItemType { text, image }
+enum SharedItemType { text, image, file }
 
 class SharedItem {
   const SharedItem({
@@ -28,13 +28,17 @@ class SharedItem {
   bool get isText => type == SharedItemType.text;
   bool get isImage => type == SharedItemType.image;
 
+  bool get isFile => type == SharedItemType.file;
+
   factory SharedItem.fromMap(Map<String, dynamic> map) {
     return SharedItem(
       id: map['id'] as String,
       userId: map['user_id'] as String,
-      type: (map['type'] as String) == 'image'
-          ? SharedItemType.image
-          : SharedItemType.text,
+      type: switch (map['type']) {
+        'image' => SharedItemType.image,
+        'file' => SharedItemType.file,
+        _ => SharedItemType.text,
+      },
       deviceName: (map['device_name'] as String?)?.trim().isNotEmpty == true
           ? map['device_name'] as String
           : 'Unknown device',

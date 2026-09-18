@@ -11,6 +11,8 @@ import '../models/shared_item.dart';
 import '../services/clipboard_sync_service.dart';
 import '../services/settings_service.dart';
 import '../services/share_service.dart';
+import '../services/download_service.dart';
+import '../widgets/save_directory_setting.dart';
 import '../widgets/shared_item_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
 
   late final ShareService _shareService;
+  late final DownloadService _downloads;
   late final ClipboardSyncService _clipboardSync;
   late final Stream<List<SharedItem>> _itemsStream;
 
@@ -37,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _shareService = ShareService(Supabase.instance.client);
+    _downloads = DownloadService(widget.settings);
     _itemsStream = _shareService.watchItems();
     _clipboardSync = ClipboardSyncService(
       shareService: _shareService,
@@ -79,47 +83,46 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _pickImage() async {
-    try {
-      final file = await FilePicker.pickFile(type: FileType.image);
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
-      await _uploadImage(bytes, file.name);
-    } catch (e) {
-      _snack('选择图片失败：$e');
-    }
-  }
-
-  Future<void> _uploadImage(List<int> bytes, String fileName) async {
-    if (bytes.length > AppConfig.maxImageBytes) {
-      _snack('图片不能超过 20 MB');
-      return;
-    }
-
+  Future<void> _pickAttachment({bool imageOnly = false}) async {
+    if (_sending) return;
     setState(() => _sending = true);
     try {
-      await _shareService.sendImageBytes(
-        bytes: Uint8List.fromList(bytes),
-        fileName: fileName,
-        deviceName: widget.settings.deviceName,
-      );
-      _snack('图片已发送');
+      final file = await FilePicker.pickFile(type: imageOnly ? FileType.image : FileType.any);
+      if (file == null) return;
+      final limit = imageOnly ? AppConfig.maxImageBytes : AppConfig.maxFileBytes;
+      if (await file.length() > limit) {
+        throw ArgumentError(imageOnly ? '图片不能超过 20 MB' : '文件不能超过 50 MB');
+      }
+      final bytes = await file.readAsBytes();
+      await _shareService.sendAttachment(bytes: bytes, fileName: file.name,
+          deviceName: widget.settings.deviceName, imageOnly: imageOnly);
+      _snack('已发送');
     } catch (e) {
-      _snack('图片发送失败：$e');
+      _snack('发送失败：$e');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
   Future<void> _handleDroppedFiles(DropDoneDetails detail) async {
-    if (!Platform.isWindows) return;
-    for (final file in detail.files.take(10)) {
-      try {
-        final bytes = await file.readAsBytes();
-        await _uploadImage(bytes, file.name);
-      } catch (e) {
-        _snack('${file.name} 上传失败：$e');
+    if (!Platform.isWindows || _sending) return;
+    setState(() => _sending = true);
+    try {
+      for (final file in detail.files.take(10)) {
+        try {
+          if (await file.length() > AppConfig.maxFileBytes) {
+            throw ArgumentError('文件不能超过 50 MB');
+          }
+          await _shareService.sendAttachment(bytes: Uint8List.fromList(await file.readAsBytes()),
+              fileName: file.name, deviceName: widget.settings.deviceName);
+          _snack('${file.name} 已发送');
+        } catch (e) {
+          _snack('${file.name} 上传失败：$e');
+        }
       }
+      if (detail.files.length > 10) _snack('每次最多发送 10 个文件，其余文件请再次拖入');
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -142,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: const Text('设置'),
           content: SizedBox(
             width: 420,
-            child: Column(
+            child: SingleChildScrollView(child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -154,18 +157,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     helperText: '历史记录里会显示此名称',
                   ),
                 ),
+                const SizedBox(height: 16),
+                SaveDirectorySetting(downloads: _downloads),
                 if (Platform.isWindows) ...[
                   const SizedBox(height: 8),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('自动同步 Windows 文本剪贴板'),
-                    subtitle: const Text('开启后，每 2 秒检测一次新的纯文本剪贴板内容。'),
+                    subtitle: const Text('仅运行期间生效，关闭窗口即退出进程。'),
                     value: clipboard,
                     onChanged: (value) => setDialogState(() => clipboard = value),
                   ),
                 ],
               ],
-            ),
+            )),
           ),
           actions: [
             TextButton(
@@ -197,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空全部历史？'),
-        content: const Text('文字、图片记录以及云端图片文件都会被删除，此操作不可恢复。'),
+        content: const Text('此刻之前的文字、图片、文件及其云端原文件都会被删除。本机已下载文件不受影响，此操作不可恢复。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -302,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Icon(Icons.cloud_upload_outlined, size: 64),
                                 SizedBox(height: 12),
                                 Text(
-                                  '松开即可发送图片',
+                                  '松开即可发送图片或文件',
                                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                                 ),
                               ],
@@ -349,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: SelectableText(
-                '同步失败：${snapshot.error}\n\n请确认已运行 supabase/schema.sql，并启用了 Realtime。',
+                '同步失败，请检查网络后重新打开应用。\n${snapshot.error}',
                 textAlign: TextAlign.center,
               ),
             ),
@@ -375,13 +380,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
                   Text(
                     _searchController.text.trim().isEmpty
-                        ? '还没有内容\n从下面发送文字或图片'
+                        ? '还没有内容\n从下面发送文字、图片或文件'
                         : '没有找到匹配内容',
                     textAlign: TextAlign.center,
                   ),
                   if (Platform.isWindows && _searchController.text.trim().isEmpty) ...[
                     const SizedBox(height: 8),
-                    const Text('也可以把图片直接拖进窗口'),
+                    const Text('也可以把图片、PDF、文档等直接拖进窗口'),
                   ],
                 ],
               ),
@@ -400,6 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 key: ValueKey(items[index].id),
                 item: items[index],
                 service: _shareService,
+                downloads: _downloads,
                 onDelete: _deleteItem,
               ),
             ),
@@ -429,8 +435,13 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 IconButton.filledTonal(
                   tooltip: '发送图片',
-                  onPressed: _sending ? null : _pickImage,
+                  onPressed: _sending ? null : () => _pickAttachment(imageOnly: true),
                   icon: const Icon(Icons.image_outlined),
+                ),
+                IconButton(
+                  tooltip: '发送文件（最大 50 MB）',
+                  onPressed: _sending ? null : () => _pickAttachment(),
+                  icon: const Icon(Icons.attach_file),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

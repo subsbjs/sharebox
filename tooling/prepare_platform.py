@@ -14,3 +14,13 @@ if platform == 'android':
         i=s.index('>')+1
         s=s[:i]+'\n    <uses-permission android:name="android.permission.INTERNET" />'+s[i:]
     p.write_text(s.replace('android:label="sharebox"','android:label="ShareBox"'))
+    activity = root/'android/app/src/main/kotlin/com/sharebox/sharebox/MainActivity.kt'
+    activity.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(root/'platform/android/MainActivity.kt', activity)
+else:
+    # Flutter's native runner exits its message loop when the main window closes.
+    # Fail the build if a changed template no longer provides this guarantee.
+    main = (root/'windows/runner/main.cpp').read_text()
+    window = (root/'windows/runner/win32_window.cpp').read_text()
+    assert 'SetQuitOnClose(true)' in main, 'Windows runner must quit on close'
+    assert 'PostQuitMessage' in window, 'Windows runner must terminate its event loop'

@@ -1,9 +1,11 @@
-import 'package:file_picker/file_picker.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/shared_item.dart';
 import '../services/share_service.dart';
+import '../services/download_service.dart';
 import '../utils/formatters.dart';
 
 class SharedItemCard extends StatefulWidget {
@@ -12,10 +14,12 @@ class SharedItemCard extends StatefulWidget {
     required this.item,
     required this.service,
     required this.onDelete,
+    required this.downloads,
   });
 
   final SharedItem item;
   final ShareService service;
+  final DownloadService downloads;
   final Future<void> Function(SharedItem item) onDelete;
 
   @override
@@ -53,23 +57,35 @@ class _SharedItemCardState extends State<SharedItemCard> {
     _snack('已复制到剪贴板');
   }
 
-  Future<void> _saveImage() async {
+  Future<void> _saveItem() async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final bytes = await widget.service.downloadImage(widget.item);
-      final result = await FilePicker.saveFile(
-        dialogTitle: '保存图片',
-        fileName: widget.item.fileName ?? 'sharebox-image.jpg',
-        bytes: bytes,
-      );
-      if (result != null) _snack('图片已保存');
+      if (!await widget.downloads.ensureDirectory()) return;
+      final item = widget.item;
+      final bytes = item.isText
+          ? Uint8List.fromList(utf8.encode(item.textContent ?? ''))
+          : await widget.service.downloadAttachment(item);
+      final name = item.isText
+          ? 'ShareBox-${item.createdAt.millisecondsSinceEpoch}.txt'
+          : item.fileName ?? 'sharebox-file';
+      final saved = await widget.downloads.save(bytes, name,
+          item.isText ? 'text/plain' : item.mimeType ?? 'application/octet-stream');
+      _snack('已保存：$saved');
     } catch (e) {
       _snack('保存失败：$e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  Widget _saveButton(String label) => TextButton.icon(
+    onPressed: _saving ? null : _saveItem,
+    icon: _saving ? const SizedBox.square(dimension: 16,
+        child: CircularProgressIndicator(strokeWidth: 2))
+        : const Icon(Icons.download_rounded, size: 18),
+    label: Text(label),
+  );
 
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
@@ -138,7 +154,7 @@ class _SharedItemCardState extends State<SharedItemCard> {
             Row(
               children: [
                 Icon(
-                  item.isText ? Icons.notes_rounded : Icons.image_outlined,
+                  item.isText ? Icons.notes_rounded : item.isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined,
                   size: 18,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -174,14 +190,16 @@ class _SharedItemCardState extends State<SharedItemCard> {
               const SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _copyText,
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  label: const Text('复制'),
+                child: Wrap(
+                  children: [
+                    _saveButton('保存 TXT'),
+                    TextButton.icon(onPressed: _copyText,
+                      icon: const Icon(Icons.copy_rounded, size: 18), label: const Text('复制')),
+                  ],
                 ),
               ),
             ] else ...[
-              FutureBuilder<String>(
+              if (item.isImage) FutureBuilder<String>(
                 future: _imageUrl,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState != ConnectionState.done) {
@@ -222,7 +240,7 @@ class _SharedItemCardState extends State<SharedItemCard> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${item.fileName ?? '图片'}  ${formatBytes(item.fileSize)}',
+                      '${item.fileName ?? '文件'}  ${formatBytes(item.fileSize)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -231,16 +249,7 @@ class _SharedItemCardState extends State<SharedItemCard> {
                       ),
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: _saving ? null : _saveImage,
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download_rounded, size: 18),
-                    label: const Text('保存'),
-                  ),
+                  _saveButton('下载'),
                 ],
               ),
             ],

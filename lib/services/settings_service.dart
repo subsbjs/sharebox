@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +14,19 @@ class SettingsService {
   static Future<SettingsService> load() async {
     final prefs = await SharedPreferences.getInstance();
     return SettingsService._(prefs);
+  }
+
+  Map<String, dynamic>? get _savedDirectory {
+    final raw = _prefs.getString('save_directory_v1');
+    return raw == null ? null : jsonDecode(raw) as Map<String, dynamic>;
+  }
+
+  String? get saveDirectory => _savedDirectory?['path'] as String?;
+  String? get saveDirectoryLabel => _savedDirectory?['label'] as String?;
+
+  Future<void> setSaveDirectory(String path, String label) async {
+    final ok = await _prefs.setString('save_directory_v1', jsonEncode({'path': path, 'label': label}));
+    if (!ok) throw StateError('无法记住保存目录，请重试');
   }
 
   String get deviceName {
