@@ -19,4 +19,5 @@ Android 构建产物是中间版本，最终交付前需使用持久保存的个
 
 首次使用需注册账号并确认邮箱，然后两台设备登录同一账号。项目未使用自定义邮件服务器，邮箱发送受 Supabase 当前默认邮件服务限制。
 
-当前安装包尚在构建验证中。
+Windows 与 Android 发布构建、静态分析和单元测试已通过：[构建记录](https://github.com/subsbjs/sharebox/actions/runs/35330534332)。
+最终交付的 Android APK 已使用个人发布证书签名并通过 v2/v3 验证；签名私钥由应用所有者单独保管。尚未进行 Windows / Android 真机安装测试。
