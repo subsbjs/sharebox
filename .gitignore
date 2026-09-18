@@ -1,0 +1,14 @@
+.dart_tool/
+.packages
+.pub/
+build/
+android/
+windows/
+config.local.json
+*.log
+.idea/
+.vscode/
+dist/
+*.jks
+*.keystore
+key.properties

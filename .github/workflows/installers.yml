@@ -1,0 +1,64 @@
+name: Build ShareBox installers
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sharebox-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: windows
+          - os: ubuntu-24.04
+            target: android
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate platform project
+        run: python tooling/prepare_platform.py
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build Windows
+        if: matrix.target == 'windows'
+        run: flutter build windows --release --dart-define-from-file=config.public.json
+      - name: Package Windows installer
+        if: matrix.target == 'windows'
+        shell: pwsh
+        run: ./tooling/package_windows.ps1
+      - name: Build Android
+        if: matrix.target == 'android'
+        run: flutter build apk --release --dart-define-from-file=config.public.json
+      - name: Collect Android for final signing
+        if: matrix.target == 'android'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/ShareBox-Android-build.apk
+          signing_jar=$(find "$ANDROID_HOME/build-tools" -path '*/lib/apksigner.jar' | sort -V | tail -n 1)
+          test -n "$signing_jar"
+          cp "$signing_jar" dist/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ShareBox-${{ matrix.target }}
+          path: |
+            dist/*
+            pubspec.lock
+          if-no-files-found: error
+          retention-days: 14

@@ -1,5 +1,22 @@
 # ShareBox
 
-Personal Windows and Android text and image sharing app.
+Windows 与 Android 私人图文同步应用。两端登录同一账号即可互传文字和图片。
 
-Installer builds are being prepared.
+## 功能
+
+- 文字与图片双向同步、历史搜索、复制文字、保存图片。
+- Windows 图片拖拽发送；可选择开启纯文本剪贴板同步。
+- Supabase 账号登录、实时更新与私有图片存储，记录按账号隔离。
+- 单张图片最大 20 MB，界面加载最近 300 条历史。
+
+## 构建
+
+提交 main 分支会自动执行静态分析、单元测试并构建 Windows 与 Android。
+Windows 构建包含 Inno Setup 安装向导及所需运行库。
+Android 构建产物是中间版本，最终交付前需使用持久保存的个人证书重新签名并验证。
+
+`config.public.json` 仅包含应用端可公开的项目 URL 和 Publishable Key。数据权限由 RLS 和私有 Storage 策略控制。不要提交服务端密钥或签名私钥。
+
+首次使用需注册账号并确认邮箱，然后两台设备登录同一账号。项目未使用自定义邮件服务器，邮箱发送受 Supabase 当前默认邮件服务限制。
+
+当前安装包尚在构建验证中。
