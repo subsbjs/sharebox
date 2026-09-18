@@ -90,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final file = await FilePicker.pickFile(type: imageOnly ? FileType.image : FileType.any);
       if (file == null) return;
       final limit = imageOnly ? AppConfig.maxImageBytes : AppConfig.maxFileBytes;
-      if (await file.length() > limit) {
+      if ((await file.length() ?? 0) > limit) {
         throw ArgumentError(imageOnly ? '图片不能超过 20 MB' : '文件不能超过 50 MB');
       }
       final bytes = await file.readAsBytes();
