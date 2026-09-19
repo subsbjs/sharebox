@@ -23,12 +23,12 @@ Android 构建产物是中间版本，最终交付前需使用持久保存的个
 
 首次使用需注册账号并确认邮箱，然后两台设备登录同一账号。项目未使用自定义邮件服务器，邮箱发送受 Supabase 当前默认邮件服务限制。
 
-Windows 与 Android 发布构建、静态分析和单元测试已通过：[构建记录](https://github.com/subsbjs/sharebox/actions/runs/35330534332)。
-最终交付的 Android APK 已使用个人发布证书签名并通过 v2/v3 验证；签名私钥由应用所有者单独保管。尚未进行 Windows / Android 真机安装测试。
+Windows 与 Android 发布构建、静态分析和 10 项测试已通过：[构建记录](https://github.com/subsbjs/sharebox/actions/runs/35348266104)。
+最终交付的 Android APK 已使用个人发布证书签名并通过 v2/v3 验证；签名私钥由应用所有者单独保管。Windows 已在构建机上实际启动并通过关闭窗口退出进程检查；Android 目录授权流程尚未真机验证。
 
 ## 升级 1.1
 
 现有项目先执行 `supabase/upgrades/1_1_files.sql`；新项目使用 `supabase/schema.sql`。两端均更新到 1.1，Android 使用原签名覆盖安装。
 此仓库对应的云端规则已更新。保存目录在每台设备的设置中分别选择。Android 11+ 请在允许的位置创建子文件夹（例如 Documents/ShareBox），不要选择受系统限制的根目录。
 
-1.1 的构建与验证结果见最新 Actions；实际手机文件管理器授权流程仍需设备验证。
+1.1 的发布构建、10 项测试、Windows 进程退出检查已通过；实际手机文件管理器授权流程仍需设备验证。
